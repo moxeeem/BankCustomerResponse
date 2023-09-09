@@ -6,7 +6,9 @@ import plotly.graph_objects as go
 from PIL import Image
 from matplotlib import pyplot as plt
 from scipy.stats import mannwhitneyu
-from eda import open_data, drop_duplicates, concat_data, fill_nans
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+from eda import open_data, drop_duplicates, concat_data, fill_nans, preprocess
 st.set_option('deprecation.showPyplotGlobalUse', False)
 
 
@@ -15,17 +17,18 @@ def preload_content():
     df_dirty = concat_data(df1, df2, df3, df4, df5, df6, df7, df8, df9)
     df_without_duplicates = drop_duplicates(df_dirty)
     df_preprocessed = fill_nans(df_without_duplicates)
+    Xtrain, Xtest, ytrain, ytest = preprocess(df_preprocessed)
 
     wallpaper = Image.open('data/wallpaper.jpeg')
 
-    return df_dirty, df_without_duplicates, df_preprocessed, wallpaper
+    return df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest
 
 
-def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper):
+def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest):
     st.title('Задача предсказания отклика клиентов банка')
     st.image(wallpaper)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([':mag: О приложении', ':soap: Подготовка данных',
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([':mag: О приложении', ':space_invader: ML модель' ,':soap: Подготовка данных',
                                                   ':dart: Целевая переменная',
                                                   ':chart_with_upwards_trend: Однофакторный анализ',
                                                   ':bar_chart: Матрицы корреляций',
@@ -69,6 +72,61 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper):
         st.table(table)
 
     with tab2:
+        st.subheader('Визуализация результатов модели')
+        st.caption('Применяется модель логистической регрессии')
+        st.subheader('Вывод метрик качества в зависимости от порога')
+
+        model = LogisticRegression()
+        model.fit(Xtrain, ytrain)
+        pred_test = model.predict(Xtest)
+
+        st.caption('Стандартная модель логистической регрессии')
+
+        accuracy = accuracy_score(ytest, pred_test)
+        precision = precision_score(ytest, pred_test)
+        recall = recall_score(ytest, pred_test)
+        f1 = f1_score(ytest, pred_test)
+
+        data = {
+            'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score'],
+            'Значение': [accuracy, precision, recall, f1]
+        }
+        table = pd.DataFrame(data)
+        st.write(table)
+
+        st.markdown("**Подбор порога вероятности**")
+        threshold = st.slider('Выберите порог вероятности (рекомендуемый порог: 0.11):', 0.0, 1.0, 0.5)
+
+        probs = model.predict_proba(Xtest)
+        probs_churn = probs[:, 1]
+        classes = probs_churn > threshold
+        accuracy = accuracy_score(ytest, classes)
+        precision = precision_score(ytest, classes)
+        recall = recall_score(ytest, classes)
+        f1 = f1_score(ytest, classes)
+
+        data = {
+            'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score'],
+            'Значение': [accuracy, precision, recall, f1]
+        }
+        table = pd.DataFrame(data)
+        st.write(table)
+
+        st.markdown("---")
+
+        st.subheader('Вывод прогноза модели на выбранном клиенте')
+
+        st.write('Выберите клиента из тестовой выборки:')
+        selected_client_index = st.selectbox('Индекс клиента', range(len(Xtest)))
+        selected_client_features = Xtest.loc[selected_client_index]
+
+        st.write('Характеристики клиента:')
+        st.write(selected_client_features)
+
+        selected_client_proba = model.predict_proba([selected_client_features])[:, 1]
+        st.write(f'Вероятность отклика на рекламу: {selected_client_proba[0]:.2f}')
+
+    with tab3:
         st.subheader('Очистка от дубликатов')
         st.write('Очистим исходные данные от дубликатов')
 
@@ -123,7 +181,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper):
         describecat = df_preprocessed.describe(include='object')
         st.write(describecat)
 
-    with tab3:
+    with tab4:
         st.subheader('Анализ целевой переменной')
         st.markdown("Целевая переменная в задаче: `TARGET`. Отклик на маркетинговую кампанию (1 — отклик был "
                     "зарегистрирован, 0 — отклика не было).")
@@ -151,7 +209,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper):
         * Несбалансированная целевая переменная может привести к снижению общей точности модели.
         """)
 
-    with tab4:
+    with tab5:
         st.subheader('Однофакторный анализ')
         st.caption('Проведем однофакторный анализ четырех признаков')
         st.markdown("#### Возраст клиента")
@@ -281,7 +339,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper):
                    'хуже откликаются на предложения банка. Тяжело сделать вывод о какой-то явной зависимости между '
                    'возрастом и откликом клиента')
 
-    with tab5:
+    with tab6:
         st.subheader('Матрицы корреляций')
         st.caption('Корреляция Пирсона (чувствительна к выбросам)')
 
@@ -303,7 +361,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper):
         между `DEPENDANTS` и `CHILD_TOTAL` (0.52)
         """)
 
-    with tab6:
+    with tab7:
         st.subheader('χ²')
         st.caption("Хи-квадрат (χ²) - это статистический тест, который используется для определения наличия или "
                    "отсутствия статистически значимой связи между двумя или более категориальными переменными.")
@@ -407,13 +465,13 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper):
 
 
 def load_page():
-    df_dirty, df_without_duplicates, df_preprocessed, wallpaper = preload_content()
+    df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest = preload_content()
 
     st.set_page_config(layout="centered",
                        page_title="Отклики клиентов банка",
                        page_icon=':bank:')
 
-    render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper)
+    render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest)
 
 
 if __name__ == "__main__":

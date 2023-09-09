@@ -1,5 +1,7 @@
 import pandas as pd
 import copy
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 
 def open_data(path="data/datasets"):
@@ -69,6 +71,28 @@ def fill_nans(df):
     df1['WORK_TIME'].fillna(median_WT, inplace=True)
 
     return df1
+
+
+def preprocess(df):
+    columns_to_use = ['AGREEMENT_RK', 'AGE', 'GENDER', 'EDUCATION',
+                      'MARITAL_STATUS', 'CHILD_TOTAL', 'DEPENDANTS',
+                      'SOCSTATUS_WORK_FL', 'SOCSTATUS_PENS_FL', 'OWN_AUTO',
+                      'FL_PRESENCE_FL', 'FAMILY_INCOME', 'PERSONAL_INCOME',
+                      'CREDIT', 'LOAD_NUM_TOTAL',
+                      'LOAN_NUM_CLOSED', 'TARGET']
+    df = df[columns_to_use]
+    df = pd.get_dummies(df, drop_first=True)
+    X = df.drop('TARGET', axis=1)
+    y = df['TARGET']
+    Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    ss = StandardScaler()
+    ss.fit(Xtrain)
+
+    Xtrain = pd.DataFrame(ss.transform(Xtrain), columns=X.columns)
+    Xtest = pd.DataFrame(ss.transform(Xtest), columns=X.columns)
+
+    return Xtrain, Xtest, ytrain, ytest
 
 
 if __name__ == "__main__":
