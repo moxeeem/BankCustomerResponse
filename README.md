@@ -108,9 +108,11 @@
 Для осуществления локального запуска приложения требуется установить все зависимости, перечисленные в файле requirements.txt, при помощи менеджера пакетов pip.
 
 Frontend приложения запускается при помощи команды:
+
 `streamlit run frontend/app.py`
 
 Backend приложения запускается при помощи команды:
+
 `uvicorn backend.app:app --reload`
 
 
@@ -120,17 +122,17 @@ Backend приложения запускается при помощи кома
 
 Скриншот раздела "ML модель":
 
-<img src="http://anopic.ag/MoKU0lb3cBP7TKYH8Z5g1yR2nAnMwnSuJpfV73d3.png" width="400">
+<img src="http://anopic.ag/MoKU0lb3cBP7TKYH8Z5g1yR2nAnMwnSuJpfV73d3.png" width="500">
 
-Скриншот разделов, связанных с разведочным анализом данных:
+Скриншоты разделов, связанных с разведочным анализом данных:
 
-<img src="http://anopic.ag/GbzgoQ4FQ7AS1rPrINndGpadSbQjR62DXs2svzVg.png" width="400">
-
-
-<img src="http://anopic.ag/RPbogCqLAaQLD5KEzXvNfhnmkVBbgArhNUSkwPt2.png" width="400">
+<img src="http://anopic.ag/GbzgoQ4FQ7AS1rPrINndGpadSbQjR62DXs2svzVg.png" width="500">
 
 
-<img src="http://anopic.ag/HCSMHNJ3CQ0VfJGnfHQU8mmdvl6LOUJ4xKIKFDOA.png" width="400">
+<img src="http://anopic.ag/RPbogCqLAaQLD5KEzXvNfhnmkVBbgArhNUSkwPt2.png" width="500">
+
+
+<img src="http://anopic.ag/HCSMHNJ3CQ0VfJGnfHQU8mmdvl6LOUJ4xKIKFDOA.png" width="500">
 
 
 ## Автор
