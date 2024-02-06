@@ -1,30 +1,27 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
+from PIL import Image
 import seaborn as sns
 import scipy.stats as stats
 import plotly.graph_objects as go
-from PIL import Image
 from matplotlib import pyplot as plt
 from scipy.stats import mannwhitneyu
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from eda import open_data, drop_duplicates, concat_data, fill_nans, preprocess
+from sklearn.metrics import precision_score, recall_score, f1_score, \
+    accuracy_score, roc_auc_score
+from preload import get_test, get_logreg_preds_probs, get_svc_preds_probs, \
+    get_logreg_tuned_preds_probs, get_svc_tuned_preds_probs, get_dirty_data, \
+    get_data_without_duplicates, get_data_preprocessed
 st.set_option('deprecation.showPyplotGlobalUse', False)
+
+BACKEND_PATH = "https://bankcustomers-backend.onrender.com/"
 
 
 def preload_content():
-    df1, df2, df3, df4, df5, df6, df7, df8, df9 = open_data()
-    df_dirty = concat_data(df1, df2, df3, df4, df5, df6, df7, df8, df9)
-    df_without_duplicates = drop_duplicates(df_dirty)
-    df_preprocessed = fill_nans(df_without_duplicates)
-    Xtrain, Xtest, ytrain, ytest = preprocess(df_preprocessed)
-
-    wallpaper = Image.open('data/wallpaper.jpeg')
-
-    return df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest
+    wallpaper = Image.open('frontend/data/wallpaper.jpeg')
+    return wallpaper
 
 
-def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest):
+def render_page(wallpaper):
     st.title('Задача предсказания отклика клиентов банка')
     st.image(wallpaper)
 
@@ -73,62 +70,175 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
     with tab2:
         st.subheader('Визуализация результатов модели')
-        st.caption('Применяется модель логистической регрессии')
-        st.subheader('Вывод метрик качества в зависимости от порога')
+        st.markdown("**Рекомендуемая модель**: Логистическая регрессия")
+        st.markdown("**ROC-AUC**: 0.5028")
 
-        model = LogisticRegression()
-        model.fit(Xtrain, ytrain)
-        pred_test = model.predict(Xtest)
+        model_names = ['Логистическая регрессия', 'Логистическая регрессия с подбором гиперпараметров',
+                       'SVM', 'SVM с подбором гиперпараметров']
+        selected_model = st.selectbox('Выберите модель:', model_names)
 
-        st.caption('Стандартная модель логистической регрессии')
+        Xtest, ytest = get_test()
 
-        accuracy = accuracy_score(ytest, pred_test)
-        precision = precision_score(ytest, pred_test)
-        recall = recall_score(ytest, pred_test)
-        f1 = f1_score(ytest, pred_test)
+        if selected_model == 'Логистическая регрессия':
+            st.caption('Применяется модель логистической регрессии')
+            st.subheader('Вывод метрик качества в зависимости от порога')
+            st.caption('Стандартная модель логистической регрессии')
+            st.markdown("**Подбор порога вероятности**")
+            threshold = st.slider('Выберите порог вероятности (рекомендуемый порог: 0.11):', 0.0, 1.0, 0.5)
 
-        data = {
-            'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score'],
-            'Значение': [accuracy, precision, recall, f1]
-        }
-        table = pd.DataFrame(data)
-        st.write(table)
+            logreg_preds, logreg_probs = get_logreg_preds_probs()
+            roc_auc = roc_auc_score(ytest, logreg_preds)
+            accuracy = accuracy_score(ytest, logreg_preds)
 
-        st.markdown("**Подбор порога вероятности**")
-        threshold = st.slider('Выберите порог вероятности (рекомендуемый порог: 0.11):', 0.0, 1.0, 0.5)
+            probs = logreg_probs
+            probs_churn = probs[:, 1]
+            classes = probs_churn > threshold
+            precision = precision_score(ytest, classes)
+            recall = recall_score(ytest, classes)
+            f1 = f1_score(ytest, classes)
 
-        probs = model.predict_proba(Xtest)
-        probs_churn = probs[:, 1]
-        classes = probs_churn > threshold
-        accuracy = accuracy_score(ytest, classes)
-        precision = precision_score(ytest, classes)
-        recall = recall_score(ytest, classes)
-        f1 = f1_score(ytest, classes)
+            data = {
+                'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score', 'ROC-AUC'],
+                'Значение': [accuracy, precision, recall, f1, roc_auc]
+            }
+            table = pd.DataFrame(data)
+            st.write(table)
 
-        data = {
-            'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score'],
-            'Значение': [accuracy, precision, recall, f1]
-        }
-        table = pd.DataFrame(data)
-        st.write(table)
+            st.markdown("---")
 
-        st.markdown("---")
+            st.subheader('Вывод прогноза модели на выбранном клиенте')
 
-        st.subheader('Вывод прогноза модели на выбранном клиенте')
+            st.write('Выберите клиента из тестовой выборки:')
+            selected_client_index = st.selectbox('Индекс клиента', range(len(Xtest)))
+            selected_client_features = Xtest.loc[selected_client_index]
 
-        st.write('Выберите клиента из тестовой выборки:')
-        selected_client_index = st.selectbox('Индекс клиента', range(len(Xtest)))
-        selected_client_features = Xtest.loc[selected_client_index]
+            st.write('Характеристики клиента:')
+            st.write(selected_client_features)
 
-        st.write('Характеристики клиента:')
-        st.write(selected_client_features)
+            selected_client_proba = logreg_probs[selected_client_index]
+            st.write(f'Вероятность отклика на рекламу: {selected_client_proba[1]:.2f}')
 
-        selected_client_proba = model.predict_proba([selected_client_features])[:, 1]
-        st.write(f'Вероятность отклика на рекламу: {selected_client_proba[0]:.2f}')
+        if selected_model == 'Логистическая регрессия с подбором гиперпараметров':
+            st.caption('Применяется модель логистической регрессии с подбором гиперпараметров')
+            st.subheader('Вывод метрик качества в зависимости от порога')
+            st.caption('Стандартная модель логистической регрессии')
+            st.markdown("**Подбор порога вероятности**")
+            threshold = st.slider('Выберите порог вероятности (рекомендуемый порог: 0.14):', 0.0, 1.0, 0.5)
+
+            logreg_tuned_preds, logreg_tuned_probs = get_logreg_tuned_preds_probs()
+            roc_auc = roc_auc_score(ytest, logreg_tuned_preds)
+            accuracy = accuracy_score(ytest, logreg_tuned_preds)
+
+            probs = logreg_tuned_probs
+            probs_churn = probs[:, 1]
+            classes = probs_churn > threshold
+            precision = precision_score(ytest, classes)
+            recall = recall_score(ytest, classes)
+            f1 = f1_score(ytest, classes)
+
+            data = {
+                'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score', 'ROC-AUC'],
+                'Значение': [accuracy, precision, recall, f1, roc_auc]
+            }
+            table = pd.DataFrame(data)
+            st.write(table)
+
+            st.markdown("---")
+
+            st.subheader('Вывод прогноза модели на выбранном клиенте')
+
+            st.write('Выберите клиента из тестовой выборки:')
+            selected_client_index = st.selectbox('Индекс клиента', range(len(Xtest)))
+            selected_client_features = Xtest.loc[selected_client_index]
+
+            st.write('Характеристики клиента:')
+            st.write(selected_client_features)
+
+            selected_client_proba = logreg_tuned_probs[selected_client_index]
+            st.write(f'Вероятность отклика на рекламу: {selected_client_proba[1]:.2f}')
+
+        if selected_model == 'SVM':
+            st.caption('Применяется модель SVC')
+            st.subheader('Вывод метрик качества в зависимости от порога')
+            st.caption('Стандартная модель SVC')
+            st.markdown("**Подбор порога вероятности**")
+            threshold = st.slider('Выберите порог вероятности (рекомендуемый порог: 0.12):', 0.0, 1.0, 0.5)
+
+            svc_preds, svc_probs = get_svc_preds_probs()
+            roc_auc = roc_auc_score(ytest, svc_preds)
+            accuracy = accuracy_score(ytest, svc_preds)
+
+            probs = svc_probs
+            probs_churn = probs[:, 1]
+            classes = probs_churn > threshold
+            precision = precision_score(ytest, classes)
+            recall = recall_score(ytest, classes)
+            f1 = f1_score(ytest, classes)
+
+            data = {
+                'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score', 'ROC-AUC'],
+                'Значение': [accuracy, precision, recall, f1, roc_auc]
+            }
+            table = pd.DataFrame(data)
+            st.write(table)
+
+            st.markdown("---")
+
+            st.subheader('Вывод прогноза модели на выбранном клиенте')
+
+            st.write('Выберите клиента из тестовой выборки:')
+            selected_client_index = st.selectbox('Индекс клиента', range(len(Xtest)))
+            selected_client_features = Xtest.loc[selected_client_index]
+
+            st.write('Характеристики клиента:')
+            st.write(selected_client_features)
+
+            selected_client_proba = svc_probs[selected_client_index]
+            st.write(f'Вероятность отклика на рекламу: {selected_client_proba[1]:.2f}')
+
+        if selected_model == 'SVM с подбором гиперпараметров':
+            st.caption('Применяется модель SVC с подбором гиперпараметров')
+            st.subheader('Вывод метрик качества в зависимости от порога')
+            st.caption('Стандартная модель SVC')
+            st.markdown("**Подбор порога вероятности**")
+            threshold = st.slider('Выберите порог вероятности (рекомендуемый порог: 0.12):', 0.0, 1.0, 0.5)
+
+            svc_tuned_preds, svc_tuned_probs = get_svc_tuned_preds_probs()
+            roc_auc = roc_auc_score(ytest, svc_tuned_preds)
+            accuracy = accuracy_score(ytest, svc_tuned_preds)
+
+            probs = svc_tuned_probs
+            probs_churn = probs[:, 1]
+            classes = probs_churn > threshold
+            precision = precision_score(ytest, classes)
+            recall = recall_score(ytest, classes)
+            f1 = f1_score(ytest, classes)
+
+            data = {
+                'Метрика': ['Accuracy', 'Precision (точность)', 'Recall (полнота)', 'F1-score', 'ROC-AUC'],
+                'Значение': [accuracy, precision, recall, f1, roc_auc]
+            }
+            table = pd.DataFrame(data)
+            st.write(table)
+
+            st.markdown("---")
+
+            st.subheader('Вывод прогноза модели на выбранном клиенте')
+
+            st.write('Выберите клиента из тестовой выборки:')
+            selected_client_index = st.selectbox('Индекс клиента', range(len(Xtest)))
+            selected_client_features = Xtest.loc[selected_client_index]
+
+            st.write('Характеристики клиента:')
+            st.write(selected_client_features)
+
+            selected_client_proba = svc_tuned_probs[selected_client_index]
+            st.write(f'Вероятность отклика на рекламу: {selected_client_proba[1]:.2f}')
 
     with tab3:
         st.subheader('Очистка от дубликатов')
         st.write('Очистим исходные данные от дубликатов')
+        df_dirty = get_dirty_data()
 
         st.caption('До очистки дубликатов:')
         duplicates_count = df_dirty.duplicated().sum()
@@ -136,6 +246,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.write(duplicates_df)
 
         st.caption('После очистки дубликатов: ')
+        df_without_duplicates = get_data_without_duplicates()
         duplicates_counts = df_without_duplicates.duplicated().sum()
         duplicates_df1 = pd.DataFrame({'Количество дубликатов': [duplicates_counts],
                                        'Размер датасета': [df_without_duplicates.shape]})
@@ -166,6 +277,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.write(total_null_count)
 
         st.caption('Количество пропусков после заполнения: ')
+        df_preprocessed = get_data_preprocessed()
 
         null_counts = df_preprocessed.isnull().sum()
         total_null_count = null_counts.sum()
@@ -186,8 +298,10 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.markdown("Целевая переменная в задаче: `TARGET`. Отклик на маркетинговую кампанию (1 — отклик был "
                     "зарегистрирован, 0 — отклика не было).")
 
-        fig = go.Figure(go.Bar(x=df_preprocessed['TARGET'].value_counts().keys(),
-                               y=df_preprocessed['TARGET'].value_counts().values))
+        df_preprocessed = get_data_preprocessed()
+
+        fig = go.Figure(go.Bar(x=df_preprocessed['target'].value_counts().keys(),
+                               y=df_preprocessed['target'].value_counts().values))
         fig.update_layout(xaxis_title="Класс", yaxis_title="Количество",title_font_color='#222',
                           title_text='Распределение целевой переменной', xaxis_title_font_color='#222',
                           yaxis_title_font_color='#222')
@@ -195,7 +309,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         st.write('Видим, что классы целевой переменной не сбалансированы')
 
-        ser = df_preprocessed['TARGET'].value_counts(normalize=True) * 100
+        ser = df_preprocessed['target'].value_counts(normalize=True) * 100
         ser = ser.reset_index()
         ser.columns = ['Значение целевой переменной', 'Количество (в процентах)']
         st.write(ser)
@@ -215,8 +329,10 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.markdown("#### Возраст клиента")
         st.write('В датасете содержится информация о клиентах в возрасте 21-67 лет. Данные представлены целыми числами')
 
-        fig = go.Figure(go.Bar(x=df_preprocessed['AGE'].value_counts().keys(),
-                               y=df_preprocessed['AGE'].value_counts().values))
+        df_preprocessed = get_data_preprocessed()
+
+        fig = go.Figure(go.Bar(x=df_preprocessed['age'].value_counts().keys(),
+                               y=df_preprocessed['age'].value_counts().values))
         fig.update_layout(xaxis_title="Возраст", yaxis_title="Количество", xaxis_title_font_color='#222',
                           yaxis_title_font_color='#222')
         st.plotly_chart(fig)
@@ -224,20 +340,20 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.markdown("**Влияние на целевую переменную**")
 
         col1, col2 = st.columns(2)
-        fig = sns.kdeplot(df_preprocessed['AGE'])
+        fig = sns.kdeplot(df_preprocessed['age'])
         col1.pyplot()
         col2.write('Из распределения переменной мы видим, что большинство клиентов банка находятся '
                    'в возрасте 25-40 лет.')
 
         col1, col2 = st.columns(2)
         plt.figure(figsize=(12, 6))
-        fig = sns.countplot(x='AGE', hue='TARGET', data=df_preprocessed, width = 1.8)
+        fig = sns.countplot(x='age', hue='target', data=df_preprocessed, width = 1.8)
         col2.pyplot()
         col2.write("""Из кросс-таблицы и графика зависимости переменной и таргета можно сделать вывод, что люди старше
          55 лет почти никогда не откликались на предложения банка. Лучше всего откликались 42-летние и 25-летние люди.
          Тяжело сделать вывод о какой-то явной зависимости между возрастом и откликом клиента""")
 
-        table = pd.crosstab(df_preprocessed['AGE'], df_preprocessed['TARGET'], normalize='index') * 100
+        table = pd.crosstab(df_preprocessed['age'], df_preprocessed['target'], normalize='index') * 100
         col1.write(table)
         st.markdown("---")
 
@@ -245,15 +361,15 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.write('GENDER — пол клиента (1 — мужчина, 0 — женщина). Переменная по факту является категориальной, '
                  'но выражается в целых числах.')
 
-        fig = go.Figure(go.Bar(x=df_preprocessed['GENDER'].value_counts().keys(),
-                               y=df_preprocessed['GENDER'].value_counts().values))
+        fig = go.Figure(go.Bar(x=df_preprocessed['gender'].value_counts().keys(),
+                               y=df_preprocessed['gender'].value_counts().values))
         fig.update_layout(xaxis_title="Пол", yaxis_title="Количество", xaxis_title_font_color='#222',
                           yaxis_title_font_color='#222')
         st.plotly_chart(fig)
 
         st.write('Мы видим, что эти классы не сбалансированы. Мужчин в датасете больше.')
 
-        ser = df_preprocessed['GENDER'].value_counts(normalize=True) * 100
+        ser = df_preprocessed['gender'].value_counts(normalize=True) * 100
         ser = ser.reset_index()
         ser.columns = ['Значение целевой переменной', 'Количество (в процентах)']
         st.write(ser)
@@ -262,13 +378,13 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         col1, col2 = st.columns(2)
         plt.figure(figsize=(12, 6))
-        fig = sns.countplot(x='GENDER', hue='TARGET', data=df_preprocessed, width = 0.8)
+        fig = sns.countplot(x='gender', hue='target', data=df_preprocessed, width = 0.8)
         col2.pyplot()
         col2.write("""Из графика зависимости и кросс-таблицы мы видим, что женщины охотнее откликаются на банковские 
         предложения, чем мужчины (не намного, на 2%). Тяжело сделать вывод о какой-то явной зависимости между полом и 
         откликом клиента""")
 
-        table = pd.crosstab(df_preprocessed['GENDER'], df_preprocessed['TARGET'], normalize='index') * 100
+        table = pd.crosstab(df_preprocessed['gender'], df_preprocessed['target'], normalize='index') * 100
         col1.write(table)
 
         st.markdown("---")
@@ -278,15 +394,15 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
             'SOCSTATUS_WORK_FL — социальный статус клиента относительно работы (1 — работает, 0 — не работает). '
             'Переменная по факту является категориальной, но выражается в целых числах')
 
-        fig = go.Figure(go.Bar(x=df_preprocessed['SOCSTATUS_WORK_FL'].value_counts().keys(),
-                               y=df_preprocessed['SOCSTATUS_WORK_FL'].value_counts().values))
+        fig = go.Figure(go.Bar(x=df_preprocessed['socstatus_work_fl'].value_counts().keys(),
+                               y=df_preprocessed['socstatus_work_fl'].value_counts().values))
         fig.update_layout(xaxis_title="Наличие работы", yaxis_title="Количество", xaxis_title_font_color='#222',
                           yaxis_title_font_color='#222')
         st.plotly_chart(fig)
 
         st.write('Мы видим, что эти классы очень не сбалансированы. Работающих людей в датасете больше, что логично.')
 
-        ser = df_preprocessed['SOCSTATUS_WORK_FL'].value_counts(normalize=True) * 100
+        ser = df_preprocessed['socstatus_work_fl'].value_counts(normalize=True) * 100
         ser = ser.reset_index()
         ser.columns = ['Значение целевой переменной', 'Количество (в процентах)']
         st.write(ser)
@@ -295,13 +411,13 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         col1, col2 = st.columns(2)
         plt.figure(figsize=(12, 6))
-        fig = sns.countplot(x='SOCSTATUS_WORK_FL', hue='TARGET', data=df_preprocessed, width=0.8)
+        fig = sns.countplot(x='socstatus_work_fl', hue='target', data=df_preprocessed, width=0.8)
         col2.pyplot()
         col2.write("""Из графика зависимости и кросс-таблицы мы видим, что работающие люди охотнее откликаются на 
         предложения банка. Мы можем сделать вывод, что существует некоторая зависимость между работой клиента и его 
         склонности к отклику""")
 
-        table = pd.crosstab(df_preprocessed['SOCSTATUS_WORK_FL'], df_preprocessed['TARGET'], normalize='index') * 100
+        table = pd.crosstab(df_preprocessed['socstatus_work_fl'], df_preprocessed['target'], normalize='index') * 100
         col1.write(table)
 
         st.markdown("---")
@@ -310,22 +426,22 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.write('Заметим, что в датасете содержится информация о клиентах с доходом 24 - 250 000 рублей. Данные '
                  'представлены вещественными числами.')
 
-        fig = go.Figure(go.Bar(x=df_preprocessed['PERSONAL_INCOME'].value_counts().keys(),
-                               y=df_preprocessed['PERSONAL_INCOME'].value_counts().values))
+        fig = go.Figure(go.Bar(x=df_preprocessed['personal_income'].value_counts().keys(),
+                               y=df_preprocessed['personal_income'].value_counts().values))
         fig.update_layout(xaxis_title="Доход", yaxis_title="Количество", xaxis_title_font_color='#222',
                           yaxis_title_font_color='#222')
         st.plotly_chart(fig)
 
         col1, col2 = st.columns(2)
-        fig = sns.kdeplot(df_preprocessed['PERSONAL_INCOME'])
+        fig = sns.kdeplot(df_preprocessed['personal_income'])
         col1.pyplot()
         col2.write(
             'Из распределения переменной мы видим, что распределение личного дохода до 50 000 рублей близко к '
             'нормальному, но после этой суммы график имеет хвост')
 
         col1, col2 = st.columns(2)
-        filtered_data = df_preprocessed[df_preprocessed['PERSONAL_INCOME'] < 50000]
-        fig = sns.kdeplot(filtered_data['PERSONAL_INCOME'])
+        filtered_data = df_preprocessed[df_preprocessed['personal_income'] < 50000]
+        fig = sns.kdeplot(filtered_data['personal_income'])
         col1.pyplot()
         col2.write('Видим, что наше предположение о нормальности неверно. Но мы были правы, когда говорили о хвосте в '
                    'графике.')
@@ -333,7 +449,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.markdown("**Влияние на целевую переменную**")
 
         col1, col2 = st.columns(2)
-        fig = plt.scatter(df_preprocessed['PERSONAL_INCOME'], df_preprocessed['TARGET'])
+        fig = plt.scatter(df_preprocessed['personal_income'], df_preprocessed['target'])
         col1.pyplot()
         col2.write('Из графика зависимости переменной и таргета можно сделать вывод, что люди с доходом больше 50 000 '
                    'хуже откликаются на предложения банка. Тяжело сделать вывод о какой-то явной зависимости между '
@@ -342,6 +458,8 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
     with tab6:
         st.subheader('Матрицы корреляций')
         st.caption('Корреляция Пирсона (чувствительна к выбросам)')
+
+        df_preprocessed = get_data_preprocessed()
 
         corr = df_preprocessed.corr(numeric_only=True)
         fig, ax = plt.subplots(figsize=(15, 15), dpi=70)
@@ -366,9 +484,11 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
         st.caption("Хи-квадрат (χ²) - это статистический тест, который используется для определения наличия или "
                    "отсутствия статистически значимой связи между двумя или более категориальными переменными.")
 
+        df_preprocessed = get_data_preprocessed()
+
         st.markdown("**`TARGET` и `SOCSTATUS_WORK_FL`**")
 
-        cont_table = pd.crosstab(df_preprocessed['TARGET'], df_preprocessed['SOCSTATUS_WORK_FL'])
+        cont_table = pd.crosstab(df_preprocessed['target'], df_preprocessed['socstatus_work_fl'])
         chi2, p_val, dof, expected = stats.chi2_contingency(cont_table)
         table = pd.DataFrame({
             "Хи-квадрат": [chi2],
@@ -387,7 +507,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         st.markdown("**`TARGET` и `GENDER`**")
 
-        cont_table = pd.crosstab(df_preprocessed['TARGET'], df_preprocessed['GENDER'])
+        cont_table = pd.crosstab(df_preprocessed['target'], df_preprocessed['gender'])
         chi2, p_val, dof, expected = stats.chi2_contingency(cont_table)
         table = pd.DataFrame({
             "Хи-квадрат": [chi2],
@@ -402,7 +522,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         st.markdown("**`TARGET` и `SOCSTATUS_PENS_FL`**")
 
-        cont_table = pd.crosstab(df_preprocessed['TARGET'], df_preprocessed['SOCSTATUS_PENS_FL'])
+        cont_table = pd.crosstab(df_preprocessed['target'], df_preprocessed['socstatus_pens_fl'])
         chi2, p_val, dof, expected = stats.chi2_contingency(cont_table)
         table = pd.DataFrame({
             "Хи-квадрат": [chi2],
@@ -416,7 +536,7 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         st.markdown("**`TARGET` и `FL_PRESENCE_FL`**")
 
-        cont_table = pd.crosstab(df_preprocessed['TARGET'], df_preprocessed['FL_PRESENCE_FL'])
+        cont_table = pd.crosstab(df_preprocessed['target'], df_preprocessed['fl_presence_fl'])
         chi2, p_val, dof, expected = stats.chi2_contingency(cont_table)
         table = pd.DataFrame({
             "Хи-квадрат": [chi2],
@@ -437,8 +557,8 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         st.markdown("**`TARGET` и `FST_PAYMENT`**")
 
-        statistic, p_value = mannwhitneyu(df_preprocessed[df_preprocessed['TARGET'] == 0]['FST_PAYMENT'],
-                                          df_preprocessed[df_preprocessed['TARGET'] == 1]['FST_PAYMENT'])
+        statistic, p_value = mannwhitneyu(df_preprocessed[df_preprocessed['target'] == 0]['fst_payment'],
+                                          df_preprocessed[df_preprocessed['target'] == 1]['fst_payment'])
 
         table = pd.DataFrame({
             "Статистика": [statistic],
@@ -451,8 +571,8 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
         st.markdown("**`TARGET` и `PERSONAL_INCOME`**")
 
-        statistic, p_value = mannwhitneyu(df_preprocessed[df_preprocessed['TARGET'] == 0]['PERSONAL_INCOME'],
-                                          df_preprocessed[df_preprocessed['TARGET'] == 1]['PERSONAL_INCOME'])
+        statistic, p_value = mannwhitneyu(df_preprocessed[df_preprocessed['target'] == 0]['personal_income'],
+                                          df_preprocessed[df_preprocessed['target'] == 1]['personal_income'])
 
         table = pd.DataFrame({
             "Статистика": [statistic],
@@ -465,14 +585,15 @@ def render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtr
 
 
 def load_page():
-    df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest = preload_content()
+    wallpaper = preload_content()
 
     st.set_page_config(layout="centered",
                        page_title="Отклики клиентов банка",
                        page_icon=':bank:')
 
-    render_page(df_dirty, df_without_duplicates, df_preprocessed, wallpaper, Xtrain, Xtest, ytrain, ytest)
+    render_page(wallpaper)
 
 
 if __name__ == "__main__":
     load_page()
+
