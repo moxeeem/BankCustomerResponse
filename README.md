@@ -1,6 +1,5 @@
 # 🏦 Задача предсказания отклика клиентов банка
-[![readme.jpg](https://anopic.ag/rBH1eeLq0d0KDZ2pPIpatAoMAnxYjQZ37jl3MFmf.jpg)](https://anopic.ag/rBH1eeLq0d0KDZ2pPIpatAoMAnxYjQZ37jl3MFmf.jpg)
-
+![img.png](https://github.com/moxeeem/BankCustomerResponse/blob/main/img/img.jpg)
 *Веб-сервис с разведочным анализом данных доступен [здесь](https://bankcustomers.streamlit.app/)*
 
 ## Описание проекта
@@ -122,17 +121,13 @@ Backend приложения запускается при помощи кома
 
 Скриншот раздела "ML модель":
 
-<img src="http://anopic.ag/MoKU0lb3cBP7TKYH8Z5g1yR2nAnMwnSuJpfV73d3.png" width="500">
+<img src="https://github.com/moxeeem/BankCustomerResponse/blob/main/img/sc1.png" width="500">
 
 Скриншоты разделов, связанных с разведочным анализом данных:
 
-<img src="http://anopic.ag/GbzgoQ4FQ7AS1rPrINndGpadSbQjR62DXs2svzVg.png" width="500">
+<img src="https://github.com/moxeeem/BankCustomerResponse/blob/main/img/sc2.png" width="500">
 
-
-<img src="http://anopic.ag/RPbogCqLAaQLD5KEzXvNfhnmkVBbgArhNUSkwPt2.png" width="500">
-
-
-<img src="http://anopic.ag/HCSMHNJ3CQ0VfJGnfHQU8mmdvl6LOUJ4xKIKFDOA.png" width="500">
+<img src="https://github.com/moxeeem/BankCustomerResponse/blob/main/img/sc3.png" width="500">
 
 
 ## Автор
